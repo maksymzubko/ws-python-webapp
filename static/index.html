@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Tic Tac Toe template</title>
+    <style>
+        .pick-place {
+            width: 40px;
+            height: 40px;
+            border: 1px solid;
+            cursor: pointer;
+            text-align: center;
+        }
+    </style>
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+</head>
+<body>
+
+<label>
+    <input id="ws-input-room">
+</label>
+<div id="ws-btns" style="display: flex">
+    <button id="ws-btn-join">JOIN</button>
+    <button id="ws-btn-create">CREATE</button>
+    <button id="ws-btn-start">START</button>
+    <button id="ws-btn-ready">ready</button>
+    <button id="ws-btn-unready">unready</button>
+    <button id="ws-btn-leave">LEAVE</button>
+    <button id="ws-btn-qr">SHOW QR</button>
+    <button id="ws-btn-success">success</button>
+</div>
+<div id="qr" style="display: none"></div>
+<div id="id">Your id: none</div>
+<div id="dip">Your dip: none</div>
+<div style="display:none;" id="result">Result:</div>
+<div id="time">0</div>
+<script type="module">
+    document.getElementById('ws-btn-qr').style.display = "none";
+    document.getElementById('ws-btn-leave').style.display = "none";
+    document.getElementById('ws-btn-start').style.display = "none";
+
+    const clearTable = () => {
+        Array.from(document.getElementsByClassName('pick-place')).forEach(el => {
+            el.innerHTML = "";
+        })
+    }
+
+    import {io} from "https://cdn.socket.io/4.4.1/socket.io.esm.min.js";
+
+    let dip = "X";
+    let id = "";
+    let players = 0;
+
+    Array.from(document.getElementsByClassName('pick-place')).forEach(el => {
+        el.addEventListener('click', () => clickEvent4(parseInt(el.id)))
+    })
+
+    let created = false;
+    const socket = io('http://localhost:3000');
+
+    socket.on('connected', (data) => {
+        console.log("connected, id: ", data)
+        id = data.id
+        document.getElementById('id').innerText = "Your id: " + id;
+    })
+
+    socket.on('joinedRoom', (data) => {
+        players++;
+        console.log('msg: joinedRoom, data:', data)
+        document.getElementById('ws-btn-create').style.display = "none";
+        document.getElementById('ws-btn-join').style.display = "none";
+        if(players === 1)
+            document.getElementById('ws-btn-start').style.display = "block";
+        else
+            document.getElementById('ws-btn-start').style.display = "none";
+
+        if (!created)
+            document.getElementById('ws-btn-qr').style.display = "none";
+        document.getElementById('ws-btn-leave').style.display = "block";
+    })
+
+    socket.on('createdRoomName', (data) => {
+        console.log('msg: createdRoomName, data:', data)
+        document.getElementById('ws-btn-qr').style.display = "block";
+        created = true;
+        document.getElementById('ws-input-room').value = data.message;
+        new QRCode(document.getElementById('qr'), data.message);
+    })
+
+    socket.on('gameStarted', (data) => {
+        console.log('msg: gameStarted, data:', data)
+        document.getElementById('result').innerText = "Result:";
+        document.getElementById('result').style.display = "none";
+    })
+
+    socket.on('playersDips', (data) => {
+        console.log('msg: playersDips, data:', data)
+        dip = data.dips.filter(d => d.id === id)[0].dip;
+        document.getElementById('dip').innerText = "Your dip: " + dip;
+    })
+
+    socket.on('gameState', (data) => {
+        console.log('msg: gameState, data:', data)
+        if (data.status) {
+            data.data.forEach(d => {
+                document.getElementById(d.point.toString()).innerText = d.dip;
+            })
+        }
+    })
+
+    socket.on('currentMove', (data) => {
+        console.log('msg: currentMove, data:', data)
+    })
+
+    socket.on('winner', (data) => {
+        console.log('msg: winner, data:', data)
+
+        let text = "";
+        if (data.status && data?.winner === id)
+            text = "Result: you won!"
+        else if (data.status && data?.winner !== id)
+            text = "Result: you lose!"
+        else if(data.status)
+            text = "Result: draw!"
+
+        document.getElementById('result').innerText = text;
+        document.getElementById('result').style.display = "block";
+    })
+
+    socket.on('leavedRoom', data => {
+        players--;
+        console.log('leavedRoom', data)
+        if (data.status && data?.client === id) {
+            players = 0;
+            hideTable();
+            document.getElementById('result').innerText = "Result:";
+            document.getElementById('result').style.display = "none";
+        }
+    })
+
+    socket.on('ready', (data) => {
+        console.log(data)
+    })
+
+    socket.on('unready', (data) => {
+        console.log(data)
+    })
+
+    socket.on('time', (data) => {
+        console.log(data)
+        document.getElementById('time').innerHTML = data.data.timeLeft;
+    })
+
+    const clickEvent = () => {
+        socket.emit('joinRoom', document.getElementById('ws-input-room').value)
+    }
+
+    const clickEvent2 = () => {
+        socket.emit('createRoom', true)
+    }
+
+    const clickEvent3 = () => {
+        socket.emit('startGame', document.getElementById('ws-input-room').value)
+    }
+
+    const clickEvent4 = (number) => {
+        console.log('click')
+        socket.emit('move', {room: document.getElementById('ws-input-room').value, point: number})
+    }
+
+    const clickEvent6 = () => {
+        socket.emit('leaveRoom', document.getElementById('ws-input-room').value)
+    }
+
+    const clickEvent7 = () => {
+        if (document.getElementById('qr').style.display === "none") {
+            document.getElementById('qr').style.display = "block"
+            document.getElementById('ws-btn-qr').innerText = "Hide QR";
+        } else {
+            document.getElementById('qr').style.display = "none"
+            document.getElementById('ws-btn-qr').innerText = "Show QR";
+        }
+    }
+    const ready = () => {
+        socket.emit('ready', document.getElementById('ws-input-room').value)
+    }
+
+    const unready = () => {
+        socket.emit('unready', document.getElementById('ws-input-room').value)
+    }
+
+    const plus = () => {
+        socket.emit('plus', document.getElementById('ws-input-room').value)
+    }
+
+    document.getElementById('ws-btn-success').addEventListener('click', plus)
+    document.getElementById('ws-btn-unready').addEventListener('click', unready)
+    document.getElementById('ws-btn-ready').addEventListener('click', ready)
+    document.getElementById('ws-btn-join').addEventListener('click', clickEvent)
+    document.getElementById('ws-btn-create').addEventListener('click', clickEvent2)
+    document.getElementById('ws-btn-start').addEventListener('click', clickEvent3)
+    document.getElementById('ws-btn-leave').addEventListener('click', clickEvent6)
+    document.getElementById('ws-btn-qr').addEventListener('click', clickEvent7)
+</script>
+</body>
+</html>
